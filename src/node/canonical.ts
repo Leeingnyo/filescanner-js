@@ -1,6 +1,6 @@
 import { ErrorCode } from '../types/enums.js';
 import type { NodeRef } from '../types/noderef.js';
-import { LayerKind } from '../types/layers.js';
+import { LayerKind, type VfsLayer } from '../types/layers.js';
 import { normalizeVPath, VPathError } from '../vpath/normalize.js';
 import { guessArchiveFormat } from '../archive/format.js';
 
@@ -44,7 +44,7 @@ export function parseCanonicalString(value: string): NodeRef {
   }
   const rest = value.slice(delim + 1);
   const parts = rest.split('!');
-  const layers = [{ kind: LayerKind.OS, rootId }];
+  const layers: VfsLayer[] = [{ kind: LayerKind.OS, rootId }];
   for (let i = 1; i < parts.length; i += 1) {
     const container = normalizeVPath(parts[i - 1]);
     layers.push({

@@ -449,15 +449,18 @@ export class SqliteSnapshotStore implements SnapshotStore {
   }
 
   private computeStats(snapshotId: SnapshotId): { nodeCount: number; dirCount: number; fileCount: number } {
-    const nodeCount = this.db
+    const nodeCountRow = this.db
       .prepare('SELECT COUNT(*) as count FROM nodes WHERE snapshotId = ? AND isDeleted = 0')
-      .get(snapshotId).count as number;
-    const dirCount = this.db
+      .get(snapshotId) as { count: number };
+    const dirCountRow = this.db
       .prepare('SELECT COUNT(*) as count FROM nodes WHERE snapshotId = ? AND isDeleted = 0 AND kind = ?')
-      .get(snapshotId, NodeKind.DIR).count as number;
-    const fileCount = this.db
+      .get(snapshotId, NodeKind.DIR) as { count: number };
+    const fileCountRow = this.db
       .prepare('SELECT COUNT(*) as count FROM nodes WHERE snapshotId = ? AND isDeleted = 0 AND kind = ?')
-      .get(snapshotId, NodeKind.FILE).count as number;
+      .get(snapshotId, NodeKind.FILE) as { count: number };
+    const nodeCount = nodeCountRow.count;
+    const dirCount = dirCountRow.count;
+    const fileCount = fileCountRow.count;
     return { nodeCount, dirCount, fileCount };
   }
 

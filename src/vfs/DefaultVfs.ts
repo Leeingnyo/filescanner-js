@@ -52,7 +52,7 @@ export class DefaultVfs implements Vfs {
     return handle.openEntryStream(ref.vpath);
   }
 
-  private listOsChildren(ref: NodeRef): Iterable<NodeRef> {
+  private listOsChildren(ref: NodeRef): NodeRef[] {
     const root = this.roots.getRoot(ref.rootId);
     const basePath = this.osPathFor(ref);
     const entries = fs.readdirSync(basePath, { withFileTypes: true });

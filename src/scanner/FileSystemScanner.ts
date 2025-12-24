@@ -19,7 +19,7 @@ import { mapFsError } from './errorMapper.js';
 import { nowInstant } from '../utils/time.js';
 import { ArchiveRegistry } from '../archive/ArchiveRegistry.js';
 import { guessArchiveFormat } from '../archive/format.js';
-import { LayerKind } from '../types/layers.js';
+import { LayerKind, type VfsLayer } from '../types/layers.js';
 import { resolveCasePolicy } from '../root/casePolicy.js';
 import { readStreamToBuffer } from '../utils/streams.js';
 
@@ -188,8 +188,9 @@ export class FileSystemScanner implements Scanner {
   ): ObservedNode {
     const name = vpath === '/' ? '' : path.posix.basename(vpath);
     const identity = { platform: IdentityPlatform.UNKNOWN, isAvailable: false };
+    const layers: VfsLayer[] = [{ kind: LayerKind.OS, rootId: root.rootId }];
     return {
-      ref: { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath },
+      ref: { rootId: root.rootId, layers, vpath },
       kind,
       name,
       size: kind === NodeKind.FILE ? stat.size : undefined,
@@ -240,7 +241,7 @@ export class FileSystemScanner implements Scanner {
     try {
       const osPath = vpathToOsPath(root, vpath);
       const handle = await reader.open({ path: osPath }, format);
-      const archiveLayers = [
+      const archiveLayers: VfsLayer[] = [
         { kind: LayerKind.OS, rootId: root.rootId },
         { kind: LayerKind.ARCHIVE, format, containerVPath: vpath }
       ];
@@ -284,7 +285,10 @@ export class FileSystemScanner implements Scanner {
               const stream = await handle.openEntryStream(entry.entryVPath);
               const buffer = await readStreamToBuffer(stream);
               const nestedHandle = await nestedReader.open({ buffer }, nestedFormat);
-              const nestedLayers = [...archiveLayers, { kind: LayerKind.ARCHIVE, format: nestedFormat, containerVPath: entry.entryVPath }];
+              const nestedLayers: VfsLayer[] = [
+                ...archiveLayers,
+                { kind: LayerKind.ARCHIVE, format: nestedFormat, containerVPath: entry.entryVPath }
+              ];
               const nestedRoot: ObservedNode = {
                 ref: { rootId: root.rootId, layers: nestedLayers, vpath: '/' },
                 kind: NodeKind.DIR,
