@@ -5,7 +5,7 @@ This tutorial demonstrates running a prepared `OperationPlan` using `FileExecuto
 ## 1) Create an executor
 
 ```ts
-import { FileExecutor, ArchiveRegistry, ZipArchiveReader, ConflictPolicy, OpType } from 'filescanner';
+import { FileExecutor, ArchiveRegistry, ZipArchiveReader, ConflictPolicy, OpType, LayerKind } from 'filescanner';
 
 const executor = new FileExecutor(rootsResolver, new ArchiveRegistry([new ZipArchiveReader()]));
 ```
@@ -22,7 +22,7 @@ const plan = {
     {
       opId: 'op:copy-1',
       type: OpType.COPY,
-      src: { rootId: 'r:1', layers: [{ kind: 'OS', rootId: 'r:1' }], vpath: '/a.txt' },
+      src: { rootId: 'r:1', layers: [{ kind: LayerKind.OS, rootId: 'r:1' }], vpath: '/a.txt' },
       dst: { rootId: 'r:1', vpath: '/out/a.txt' },
       policy: { conflict: ConflictPolicy.RENAME }
     }
@@ -53,4 +53,3 @@ await executor.execute(checked, {
 
 - `MOVE` and `DELETE` require OS-layer sources.
 - `COPY` may use archive-layer sources (extract).
-

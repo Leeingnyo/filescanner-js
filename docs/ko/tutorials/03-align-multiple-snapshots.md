@@ -21,12 +21,12 @@ const result = aligner.align(
 );
 
 console.log(result.rows.length);
+console.log(result.rows[0]);
 ```
 
-팁:
+## 팁
 
 - `{ type: AlignKeyType.ENTITY_KEY }`는 rename 추적에 유리합니다(엔티티 키가 안정적이라면).
 - `{ type: AlignKeyType.COMPOSITE, parts: [AlignKeyType.ENTITY_KEY, AlignKeyType.VPATH] }`로 충돌을 줄일 수 있습니다.
 
 행 키 계산 방식은 `docs/ko/explanations/alignment-row-keys.md` 참고.
-

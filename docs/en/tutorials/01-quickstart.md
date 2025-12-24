@@ -92,7 +92,9 @@ await new Promise<void>((resolve, reject) => {
 const updated = store.getSnapshot(snapshot.snapshotId);
 console.log(updated.stats); // { nodeCount, dirCount, fileCount }
 
-const rootRef = { rootId: root.rootId, layers: [{ kind: 'OS', rootId: root.rootId }], vpath: '/' };
+import { LayerKind } from 'filescanner';
+
+const rootRef = { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/' };
 const children = store.listChildren(snapshot.snapshotId, rootRef).nodes;
 ```
 
@@ -100,4 +102,3 @@ const children = store.listChildren(snapshot.snapshotId, rootRef).nodes;
 
 - `FileSystemScanner` currently does not compute OS file IDs or content hashes (identity is usually `UNKNOWN`).
 - The `concurrency` field exists in the API but is not used by the current scanner implementation.
-

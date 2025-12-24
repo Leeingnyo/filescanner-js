@@ -51,6 +51,7 @@ await new Promise<void>((resolve, reject) => {
     },
     onError(error: any) {
       // 앱에 맞게 로그/집계하세요.
+      // 참고: 스펙상 “특정 NodeRef에 귀속 가능한 에러”는 해당 노드의 errors에도 포함되는 것이 기대됩니다.
       void error;
     },
     onRunFinished(run: any, coverage: any) {
@@ -90,10 +91,14 @@ await new Promise<void>((resolve, reject) => {
 ```ts
 const updated = store.getSnapshot(snapshot.snapshotId);
 console.log(updated.stats); // { nodeCount, dirCount, fileCount }
+
+import { LayerKind } from 'filescanner';
+
+const rootRef = { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/' };
+const children = store.listChildren(snapshot.snapshotId, rootRef).nodes;
 ```
 
 ## 참고 (현재 구현의 특징)
 
 - 현재 `FileSystemScanner`는 OS 파일 ID나 컨텐츠 해시를 계산하지 않습니다(대부분 `UNKNOWN`).
 - `concurrency` 필드는 API에는 있지만 현재 스캐너 구현에서 사용되지 않습니다.
-

@@ -5,7 +5,7 @@
 ## 1) Executor 생성
 
 ```ts
-import { FileExecutor, ArchiveRegistry, ZipArchiveReader } from 'filescanner';
+import { FileExecutor, ArchiveRegistry, ZipArchiveReader, ConflictPolicy, OpType, LayerKind } from 'filescanner';
 
 const executor = new FileExecutor(rootsResolver, new ArchiveRegistry([new ZipArchiveReader()]));
 ```
@@ -15,8 +15,6 @@ const executor = new FileExecutor(rootsResolver, new ArchiveRegistry([new ZipArc
 ## 2) Plan 준비
 
 ```ts
-import { ConflictPolicy, OpType } from 'filescanner';
-
 const plan = {
   planId: 'p:1',
   createdAt: new Date().toISOString(),
@@ -24,7 +22,7 @@ const plan = {
     {
       opId: 'op:copy-1',
       type: OpType.COPY,
-      src: { rootId: 'r:1', layers: [{ kind: 'OS', rootId: 'r:1' }], vpath: '/a.txt' },
+      src: { rootId: 'r:1', layers: [{ kind: LayerKind.OS, rootId: 'r:1' }], vpath: '/a.txt' },
       dst: { rootId: 'r:1', vpath: '/out/a.txt' },
       policy: { conflict: ConflictPolicy.RENAME }
     }
@@ -55,4 +53,3 @@ await executor.execute(checked, {
 
 - `MOVE`, `DELETE`는 OS-layer source만 허용됩니다.
 - `COPY`는 archive-layer source도 가능(추출).
-

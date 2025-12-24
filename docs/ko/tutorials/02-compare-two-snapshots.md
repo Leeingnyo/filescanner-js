@@ -20,6 +20,7 @@ const opts = {
   scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE },
   requireObservedCoverage: true,
   identity: {
+    // “AUTO”는 Root capabilities를 기반으로 case policy를 해석한다는 의미입니다(spec.md 참고).
     casePolicy: 'AUTO',
     conflictHandling: ConflictHandling.MARK_CONFLICT,
     thresholds: { sameCertain: 0.8, sameLikely: 0.5, differentCertain: 0.8 },
@@ -40,6 +41,7 @@ const opts = {
 ```ts
 const result = comparer.compare(leftSnapshotId, rightSnapshotId, opts);
 console.log(result.summary);
+console.log(result.entries.slice(0, 20));
 ```
 
 ## Coverage 의미
@@ -47,4 +49,3 @@ console.log(result.summary);
 `requireObservedCoverage=true`이면, 두 스냅샷의 “마지막 완료 run coverage”가 요청 scope를 커버하지 않을 때 `NOT_COVERED`가 됩니다.
 
 - `docs/ko/explanations/coverage-and-tombstones.md` 참고
-
