@@ -3,6 +3,9 @@ import { makeRoot, makeStore, makeObservedNode } from './helpers.js';
 import { RunStatus, ScopeCompleteness, ScopeMode } from '../../../../src/types/scan.js';
 import { NodeKind } from '../../../../src/types/enums.js';
 import { LayerKind } from '../../../../src/types/layers.js';
+import { toCanonicalString } from '../../../../src/node/canonical.js';
+import { utf8ByteCompare } from '../../../../src/utils/utf8.js';
+import { NodeSortKey, SortOrder } from '../../../../src/types/store/query.js';
 
 function makeRun(rootId: string, runId: string) {
   return {
@@ -71,6 +74,47 @@ describe('SqliteSnapshotStore queries', () => {
 
     const byHash = store.findByHash(snapshot.snapshotId, 'sha256', 'aaa');
     expect(byHash.nodes.map((n) => n.name)).toEqual(['A.txt']);
+    store.close();
+  });
+
+  it('paginates deterministically for tied sort keys', () => {
+    const store = makeStore();
+    const root = makeRoot('r:3');
+    store.registerRoot(root);
+    const snapshot = store.createSnapshot(root.rootId);
+
+    const run = makeRun(root.rootId, 'run:1');
+    const session = store.beginPatch(snapshot.snapshotId, run);
+    session.upsertNodes([
+      makeObservedNode({ rootId: root.rootId, vpath: '/files/a.txt', name: 'a.txt', runId: run.runId, size: 10 }),
+      makeObservedNode({ rootId: root.rootId, vpath: '/files/c.txt', name: 'c.txt', runId: run.runId, size: 10 }),
+      makeObservedNode({ rootId: root.rootId, vpath: '/files/b.txt', name: 'b.txt', runId: run.runId, size: 10 })
+    ]);
+    session.recordCoverage({
+      runId: run.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
+    session.commit();
+
+    const page1 = store.queryNodes(snapshot.snapshotId, {
+      filter: { vpathPrefix: '/files', kinds: [NodeKind.FILE] },
+      sort: { key: NodeSortKey.SIZE, order: SortOrder.ASC },
+      page: { limit: 2 }
+    });
+    const page2 = store.queryNodes(snapshot.snapshotId, {
+      filter: { vpathPrefix: '/files', kinds: [NodeKind.FILE] },
+      sort: { key: NodeSortKey.SIZE, order: SortOrder.ASC },
+      page: { limit: 2, cursor: page1.nextCursor }
+    });
+
+    const combined = [...page1.nodes, ...page2.nodes];
+    const ids = combined.map((node) => node.nodeId);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    const expected = combined
+      .slice()
+      .sort((a, b) => utf8ByteCompare(toCanonicalString(a.ref), toCanonicalString(b.ref)));
+    expect(combined.map((node) => node.ref.vpath)).toEqual(expected.map((node) => node.ref.vpath));
     store.close();
   });
 });

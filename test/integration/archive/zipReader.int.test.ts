@@ -40,4 +40,41 @@ describe('ZipArchiveReader', () => {
     expect(buffer.toString('utf8')).toBe('a');
     handle.close();
   });
+
+  it('opens from buffer and stream sources', async () => {
+    const zipPath = await createZip([{ name: 'a.txt', content: 'a' }, { name: 'dir/b.txt', content: 'b' }]);
+    const reader = new ZipArchiveReader();
+
+    const buffer = fs.readFileSync(zipPath);
+    const bufferHandle = await reader.open({ buffer }, 'zip');
+    const prefixed = Array.from(bufferHandle.listEntries('/dir')).map((e) => e.entryVPath);
+    expect(prefixed).toEqual(['/dir/b.txt']);
+    bufferHandle.close();
+
+    const streamHandle = await reader.open({ stream: fs.createReadStream(zipPath) }, 'zip');
+    expect(() => streamHandle.statEntry('/missing.txt')).toThrow('Entry not found');
+    streamHandle.close();
+  });
+
+  it('captures invalid entry errors and skips traversal', async () => {
+    const zipPath = await createZip([
+      { name: 'a//b.txt', content: 'bad' },
+      { name: 'ok.txt', content: 'ok' }
+    ]);
+    const reader = new ZipArchiveReader();
+    const errors: Error[] = [];
+    const handle = await reader.open({ path: zipPath }, 'zip', {
+      onError: (err) => errors.push(err)
+    });
+    expect(errors.length).toBeGreaterThan(0);
+    expect(handle.errors.length).toBeGreaterThan(0);
+    const entries = Array.from(handle.listEntries('/')).map((e) => e.entryVPath);
+    expect(entries).toContain('/ok.txt');
+    handle.close();
+  });
+
+  it('rejects unsupported container sources', async () => {
+    const reader = new ZipArchiveReader();
+    await expect(reader.open({} as any, 'zip')).rejects.toThrow('Unsupported container source');
+  });
 });

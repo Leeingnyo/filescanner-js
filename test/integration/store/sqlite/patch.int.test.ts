@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { makeRoot, makeStore, makeObservedNode } from './helpers.js';
 import { RunStatus, ScopeCompleteness, ScopeMode } from '../../../../src/types/scan.js';
-import { NodeKind } from '../../../../src/types/enums.js';
+import { ErrorCode, ErrorStage, NodeKind } from '../../../../src/types/enums.js';
+import type { NodeError } from '../../../../src/types/error.js';
 import { LayerKind } from '../../../../src/types/layers.js';
 
 function makeRun(rootId: string, runId: string) {
@@ -125,6 +126,86 @@ describe('SqliteSnapshotStore patching', () => {
       true
     )!;
     expect(node.isDeleted).toBe(false);
+    store.close();
+  });
+
+  it('keeps deletedAt stable and undeletes with firstSeenAt preserved', () => {
+    const store = makeStore();
+    const root = makeRoot('r:4');
+    store.registerRoot(root);
+    const snapshot = store.createSnapshot(root.rootId);
+
+    const run1 = makeRun(root.rootId, 'run:1');
+    const session1 = store.beginPatch(snapshot.snapshotId, run1);
+    session1.upsertNodes([makeObservedNode({ rootId: root.rootId, vpath: '/a', name: 'a', runId: run1.runId })]);
+    session1.recordCoverage({
+      runId: run1.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
+    session1.commit();
+    const initial = store.getNodeByRef(snapshot.snapshotId, { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/a' })!;
+
+    const run2 = makeRun(root.rootId, 'run:2');
+    const session2 = store.beginPatch(snapshot.snapshotId, run2);
+    session2.upsertNodes([]);
+    session2.recordCoverage({
+      runId: run2.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
+    session2.commit();
+    const deleted = store.getNodeByRef(snapshot.snapshotId, { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/a' }, true)!;
+    const deletedAt = deleted.deletedAt;
+
+    const run3 = makeRun(root.rootId, 'run:3');
+    const session3 = store.beginPatch(snapshot.snapshotId, run3);
+    session3.upsertNodes([]);
+    session3.recordCoverage({
+      runId: run3.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
+    session3.commit();
+    const deletedAgain = store.getNodeByRef(snapshot.snapshotId, { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/a' }, true)!;
+    expect(deletedAgain.deletedAt).toBe(deletedAt);
+
+    const run4 = makeRun(root.rootId, 'run:4');
+    const session4 = store.beginPatch(snapshot.snapshotId, run4);
+    session4.upsertNodes([makeObservedNode({ rootId: root.rootId, vpath: '/a', name: 'a', runId: run4.runId })]);
+    session4.recordCoverage({
+      runId: run4.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
+    session4.commit();
+    const undeleted = store.getNodeByRef(snapshot.snapshotId, { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/a' }, true)!;
+    expect(undeleted.isDeleted).toBe(false);
+    expect(undeleted.deletedAt).toBeUndefined();
+    expect(undeleted.firstSeenAt).toBe(initial.firstSeenAt);
+    store.close();
+  });
+
+  it('persists coverage completeness and errors in snapshot', () => {
+    const store = makeStore();
+    const root = makeRoot('r:5');
+    store.registerRoot(root);
+    const snapshot = store.createSnapshot(root.rootId);
+
+    const run = makeRun(root.rootId, 'run:1');
+    const session = store.beginPatch(snapshot.snapshotId, run);
+    const error: NodeError = {
+      code: ErrorCode.IO_ERROR,
+      stage: ErrorStage.LIST,
+      message: 'failed',
+      retryable: true,
+      at: new Date(1_700_000_000_000).toISOString()
+    };
+    session.recordCoverage({
+      runId: run.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.PARTIAL, errors: [error] }]
+    });
+    session.commit();
+
+    const updated = store.getSnapshot(snapshot.snapshotId);
+    expect(updated.lastCoverage.scopes[0].completeness).toBe(ScopeCompleteness.PARTIAL);
+    expect(updated.lastCoverage.scopes[0].errors?.[0].code).toBe(ErrorCode.IO_ERROR);
     store.close();
   });
 });
