@@ -22,7 +22,6 @@ const scopes = [{ baseVPath: '/photos', mode: ScopeMode.CHILDREN_ONLY }];
 
 ## Why this matters (patch deletion reconciliation)
 
-Deletion marking happens **only inside recorded coverage scopes** when you commit a patch session.
+Deletion marking happens **only inside COMPLETE coverage scopes** when you commit a patch session.
 
 See `docs/en/explanations/coverage-and-tombstones.md`.
-

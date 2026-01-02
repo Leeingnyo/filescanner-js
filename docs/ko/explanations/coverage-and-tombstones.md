@@ -9,6 +9,12 @@
 
 스냅샷에는 `snapshot.lastCoverage`로 “마지막 완료 run의 coverage”만 저장됩니다(누적 아님).
 
+Coverage는 scope 단위로 기록됩니다:
+
+- `CoverageScope = { scope, completeness, errors? }`
+- `completeness`는 `COMPLETE` 또는 `PARTIAL`
+- `errors`는 부분 스캔의 원인이 된 대표 오류를 포함할 수 있습니다
+
 이 값은:
 
 - Compare(STRICT/LENIENT)
@@ -18,7 +24,7 @@
 
 ## Tombstone(삭제)
 
-삭제 판정은 커밋 시점에 coverage scope 내부에서만 수행됩니다.
+삭제 판정은 커밋 시점에 **COMPLETE** scope 내부에서만 수행됩니다.
 
 - coverage 내부에 있었는데 이번 run에서 관측되지 않으면 `isDeleted=true`
 - 기본 쿼리는 삭제 노드를 제외하며, `includeDeleted=true`로 포함 가능
@@ -27,4 +33,3 @@
 
 - 안정적인 diff가 필요하면 항상 일정한 coverage로 스캔하세요.
 - 부분 스캔을 자주 한다면 LENIENT 비교 또는 `requireObservedCoverage=false` 사용을 고려하세요.
-

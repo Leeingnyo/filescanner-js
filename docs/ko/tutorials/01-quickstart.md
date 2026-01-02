@@ -100,5 +100,6 @@ const children = store.listChildren(snapshot.snapshotId, rootRef).nodes;
 
 ## 참고 (현재 구현의 특징)
 
-- 현재 `FileSystemScanner`는 OS 파일 ID나 컨텐츠 해시를 계산하지 않습니다(대부분 `UNKNOWN`).
+- POSIX `dev`/`inode`는 `RootCapabilities.supportsFileId=true`일 때만 기록됩니다.
+- Windows 파일 ID와 컨텐츠 해시는 현재 스캐너가 계산하지 않습니다.
 - `concurrency` 필드는 API에는 있지만 현재 스캐너 구현에서 사용되지 않습니다.

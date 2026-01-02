@@ -9,6 +9,10 @@ All stores implement the `SnapshotStore` interface (`src/store/SnapshotStore.ts`
 3) `PatchSession.recordCoverage(coverage)`
 4) `PatchSession.commit()` (or `abort()`)
 
+Notes:
+
+- Deletion reconciliation runs only for scopes with `completeness=COMPLETE`.
+
 ## Implementations
 
 ### `MemorySnapshotStore`
@@ -21,4 +25,3 @@ All stores implement the `SnapshotStore` interface (`src/store/SnapshotStore.ts`
 - Persistent store backed by `better-sqlite3`.
 - Provides indices for common queries (entity key, identity, hashes).
 - `close()` is available on this class (not part of the `SnapshotStore` interface).
-

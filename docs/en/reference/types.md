@@ -24,4 +24,5 @@ For the authoritative definitions, see `src/types/*` and `spec.md`.
 
 - `ObservedNode`: scanner output (streamed in batches)
 - `NodeMeta`: stored form (adds `nodeId`, `entityKey`, `firstSeenAt`, tombstone fields, etc.)
-
+- `Coverage`: `{ runId, scopes: CoverageScope[] }`
+- `CoverageScope`: `{ scope, completeness, errors? }`

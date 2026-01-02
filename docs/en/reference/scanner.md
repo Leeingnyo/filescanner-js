@@ -13,6 +13,6 @@
 Notes:
 
 - The current implementation is synchronous I/O internally (callback-driven outward).
-- Identity and hashes are not computed by default (identity is usually `UNKNOWN`).
+- POSIX identity (`dev`/`inode`) is captured only when `RootCapabilities.supportsFileId=true`.
+- Windows file IDs and content hashes are not computed by the current scanner.
 - Ignore rules are applied against the normalized VPath form.
-

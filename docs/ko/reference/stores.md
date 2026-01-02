@@ -9,6 +9,10 @@
 3) `PatchSession.recordCoverage(coverage)`
 4) `PatchSession.commit()` (또는 `abort()`)
 
+참고:
+
+- 삭제 판정은 `completeness=COMPLETE`인 scope에서만 수행됩니다.
+
 ## 구현체
 
 ### `MemorySnapshotStore`
@@ -21,4 +25,3 @@
 - `better-sqlite3` 기반 영속 스토어
 - 자주 쓰는 쿼리(entityKey/identity/hash 등)에 인덱스 제공
 - `close()` 메서드가 있습니다(인터페이스에는 없음)
-

@@ -23,4 +23,5 @@
 
 - `ObservedNode`: 스캐너 출력
 - `NodeMeta`: 스토어 저장 형태(식별/삭제/관측 메타 포함)
-
+- `Coverage`: `{ runId, scopes: CoverageScope[] }`
+- `CoverageScope`: `{ scope, completeness, errors? }`

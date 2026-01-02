@@ -22,7 +22,6 @@ const scopes = [{ baseVPath: '/photos', mode: ScopeMode.CHILDREN_ONLY }];
 
 ## 중요한 이유 (삭제 판정 범위)
 
-패치 커밋 시 삭제(tombstone) 판정은 **record된 coverage scope 내부에서만** 수행됩니다.
+패치 커밋 시 삭제(tombstone) 판정은 **COMPLETE coverage scope 내부에서만** 수행됩니다.
 
 - `docs/ko/explanations/coverage-and-tombstones.md` 참고
-

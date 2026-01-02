@@ -100,5 +100,6 @@ const children = store.listChildren(snapshot.snapshotId, rootRef).nodes;
 
 ## Notes / current implementation details
 
-- `FileSystemScanner` currently does not compute OS file IDs or content hashes (identity is usually `UNKNOWN`).
+- `FileSystemScanner` captures POSIX `dev`/`inode` only when `RootCapabilities.supportsFileId=true`.
+- Windows file IDs and content hashes are not computed by the current scanner.
 - The `concurrency` field exists in the API but is not used by the current scanner implementation.
