@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { makeRoot, makeStore, makeObservedNode } from './memoryTestHelpers.js';
 import { RunStatus, ScopeCompleteness, ScopeMode, type ScanRun, type Coverage } from '../../types/scan.js';
-import { NodeKind } from '../../types/enums.js';
+import { ErrorCode, ErrorStage, NodeKind } from '../../types/enums.js';
+import type { NodeError } from '../../types/error.js';
 import { LayerKind } from '../../types/layers.js';
 
 function makeRun(rootId: string, runId: string): ScanRun {
@@ -67,6 +68,7 @@ describe('MemorySnapshotStore patching', () => {
     ]);
     session1.recordCoverage(fullCoverage(run1.runId));
     session1.commit();
+    const initial = store.getNodeByRef(snapshot.snapshotId, { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/a' })!;
 
     const run2 = makeRun(root.rootId, 'run:2');
     const session2 = store.beginPatch(snapshot.snapshotId, run2);
@@ -93,6 +95,7 @@ describe('MemorySnapshotStore patching', () => {
     const undeleted = store.getNodeByRef(snapshot.snapshotId, { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/a' }, true)!;
     expect(undeleted.isDeleted).toBe(false);
     expect(undeleted.deletedAt).toBeUndefined();
+    expect(undeleted.firstSeenAt).toBe(initial.firstSeenAt);
   });
 
   it('reconciles only immediate children for CHILDREN_ONLY', () => {
@@ -159,5 +162,31 @@ describe('MemorySnapshotStore patching', () => {
       true
     )!;
     expect(node.isDeleted).toBe(false);
+  });
+
+  it('persists coverage completeness and errors in snapshot', () => {
+    const store = makeStore();
+    const root = makeRoot('r:5');
+    store.registerRoot(root);
+    const snapshot = store.createSnapshot(root.rootId);
+
+    const run = makeRun(root.rootId, 'run:1');
+    const session = store.beginPatch(snapshot.snapshotId, run);
+    const error: NodeError = {
+      code: ErrorCode.IO_ERROR,
+      stage: ErrorStage.LIST,
+      message: 'failed',
+      retryable: true,
+      at: new Date(1_700_000_000_000).toISOString()
+    };
+    session.recordCoverage({
+      runId: run.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.PARTIAL, errors: [error] }]
+    });
+    session.commit();
+
+    const updated = store.getSnapshot(snapshot.snapshotId);
+    expect(updated.lastCoverage.scopes[0].completeness).toBe(ScopeCompleteness.PARTIAL);
+    expect(updated.lastCoverage.scopes[0].errors?.[0].code).toBe(ErrorCode.IO_ERROR);
   });
 });

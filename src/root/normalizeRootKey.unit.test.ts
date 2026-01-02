@@ -17,4 +17,14 @@ describe('normalizeRootKey', () => {
     const key = normalizeRootKey('\\\\?\\UNC\\server\\share\\dir\\', OsKind.WINDOWS);
     expect(key).toBe('winpath:\\\\server\\share\\dir');
   });
+
+  it('normalizes drive letter and trailing slash', () => {
+    const key = normalizeRootKey('c:\\Foo\\', OsKind.WINDOWS);
+    expect(key).toBe('winpath:C:\\Foo');
+  });
+
+  it('normalizes UNC paths and trims trailing slash', () => {
+    const key = normalizeRootKey('\\\\server\\share\\dir\\', OsKind.WINDOWS);
+    expect(key).toBe('winpath:\\\\server\\share\\dir');
+  });
 });

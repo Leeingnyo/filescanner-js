@@ -29,4 +29,8 @@ describe('zip entry normalization', () => {
     expect(() => normalizeZipPath('/abs.txt')).toThrow(ZipEntryError);
     expect(() => normalizeZipPath('a//b')).toThrow(ZipEntryError);
   });
+
+  it('normalizes dot-only paths to root', () => {
+    expect(normalizeZipPath('.')).toBe('/');
+  });
 });
