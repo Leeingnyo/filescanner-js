@@ -26,6 +26,13 @@ If you prefer to start from code:
 - Diff/alignment: `src/compare/DefaultComparer.ts`, `src/align/DefaultAligner.ts`
 - Ops: `src/ops/FileExecutor.ts`
 
+## Testing layout and scripts
+
+- Unit tests live alongside source in `src/**/*.unit.test.ts`
+- Integration tests live in `test/integration/**/*.int.test.ts`
+- E2E tests (if any) live in `test/e2e/**/*.e2e.test.ts`
+- Scripts: `yarn test:unit`, `yarn test:integration`, `yarn test:e2e`, `yarn test`, `yarn test:coverage`
+
 ## Documentation map (4-Document Model)
 
 ### Tutorials (learning-oriented)
@@ -61,4 +68,3 @@ If you prefer to start from code:
 - `docs/en/reference/stores.md`
 - `docs/en/reference/compare-align.md`
 - `docs/en/reference/ops-and-vfs.md`
-
