@@ -1,14 +1,15 @@
-import RE2 from 're2';
 import { CasePolicy } from '../../types/enums.js';
 import type { IgnoreRules } from '../../types/scanPolicy.js';
 import type { VPath } from '../../types/ids.js';
 import { vpathFold } from '../../vpath/fold.js';
 import { globToRegExp } from './glob.js';
 import { asciiFold } from '../../utils/asciiFold.js';
+import type { CompiledRegex } from './compileRegex.js';
+import { compileRegex } from './compileRegex.js';
 
 export class IgnoreMatcher {
   private readonly globMatchers: RegExp[];
-  private readonly regexMatchers: RE2[];
+  private readonly regexMatchers: CompiledRegex[];
   private readonly casePolicy: CasePolicy;
 
   constructor(rules: IgnoreRules, casePolicy: CasePolicy) {
@@ -19,7 +20,7 @@ export class IgnoreMatcher {
       const normalized = anchored ? effective : effective;
       return globToRegExp(normalized, anchored);
     });
-    this.regexMatchers = (rules.regex ?? []).map((pattern) => new RE2(pattern));
+    this.regexMatchers = (rules.regex ?? []).map((pattern) => compileRegex(pattern));
   }
 
   isIgnored(vpath: VPath): boolean {
