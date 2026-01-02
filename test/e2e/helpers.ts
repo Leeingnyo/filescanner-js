@@ -96,15 +96,16 @@ export async function scanAndPersist(params: {
   snapshotId: SnapshotId;
   scopes: ScanScope[];
   includeArchives: boolean;
+  policy?: ScanPolicy;
   cancel?: boolean;
 }): Promise<{ run: ScanRun; coverage: Coverage; nodes: ObservedNode[] }> {
-  const { store, root, snapshotId, scopes, includeArchives, cancel } = params;
+  const { store, root, snapshotId, scopes, includeArchives, policy, cancel } = params;
   const scanner = new FileSystemScanner({ getRoot: () => root }, new ArchiveRegistry([new ZipArchiveReader()]));
   const request: ScanRequest = {
     snapshotId,
     rootId: root.rootId,
     scopes,
-    policy: makePolicy(includeArchives),
+    policy: policy ?? makePolicy(includeArchives),
     ignore: defaultIgnore,
     concurrency: defaultConcurrency
   };
