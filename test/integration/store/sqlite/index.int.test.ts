@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeRoot, makeStore, makeObservedNode } from './helpers.js';
-import { RunStatus, ScopeMode } from '../../../../src/types/scan.js';
+import { RunStatus, ScopeCompleteness, ScopeMode } from '../../../../src/types/scan.js';
 import { NodeKind } from '../../../../src/types/enums.js';
 
 function makeRun(rootId: string, runId: string) {
@@ -27,7 +27,10 @@ describe('SqliteSnapshotStore indexes', () => {
       makeObservedNode({ rootId: root.rootId, vpath: '/a', name: 'a', runId: run.runId, identity: { dev: 7, inode: 8 } }),
       makeObservedNode({ rootId: root.rootId, vpath: '/b', name: 'b', runId: run.runId, identity: { dev: 7, inode: 9 } })
     ]);
-    session.recordCoverage({ runId: run.runId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }] });
+    session.recordCoverage({
+      runId: run.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
     session.commit();
 
     const byIdentity = store.findByOsIdentity(snapshot.snapshotId, 'posix:7:8');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeRoot, makeStore, makeObservedNode } from './memoryTestHelpers.js';
-import { RunStatus, ScopeMode } from '../../types/scan.js';
+import { RunStatus, ScopeCompleteness, ScopeMode } from '../../types/scan.js';
 import { NodeKind } from '../../types/enums.js';
 import { LayerKind } from '../../types/layers.js';
 
@@ -29,7 +29,10 @@ describe('MemorySnapshotStore queries', () => {
       makeObservedNode({ rootId: root.rootId, vpath: '/A', name: 'A', runId: run.runId }),
       makeObservedNode({ rootId: root.rootId, vpath: '/c', name: 'c', runId: run.runId })
     ]);
-    session.recordCoverage({ runId: run.runId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }] });
+    session.recordCoverage({
+      runId: run.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
     session.commit();
 
     const parentRef = { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/' };
@@ -53,7 +56,10 @@ describe('MemorySnapshotStore queries', () => {
       makeObservedNode({ rootId: root.rootId, vpath: '/Files/B.txt', name: 'B.txt', runId: run.runId, size: 20, hash: { algo: 'sha256', value: 'bbb' } }),
       makeObservedNode({ rootId: root.rootId, vpath: '/Other/C.txt', name: 'C.txt', runId: run.runId, size: 30 })
     ]);
-    session.recordCoverage({ runId: run.runId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }] });
+    session.recordCoverage({
+      runId: run.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
     session.commit();
 
     const byPrefix = store.queryNodes(snapshot.snapshotId, { filter: { vpathPrefix: '/files' } });

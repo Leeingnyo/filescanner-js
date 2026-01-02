@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemorySnapshotStore } from '../store/memory/MemorySnapshotStore.js';
 import { makeObservedNode, makeRoot } from '../store/memory/memoryTestHelpers.js';
-import { RunStatus, ScopeMode } from '../types/scan.js';
+import { RunStatus, ScopeCompleteness, ScopeMode } from '../types/scan.js';
 import { DefaultAligner } from './DefaultAligner.js';
 import { AlignKeyType } from '../types/align.js';
 import { CompareMode } from '../types/compare.js';
@@ -31,7 +31,10 @@ describe('DefaultAligner', () => {
       makeObservedNode({ rootId: root.rootId, vpath: '/', name: '', runId: run1.runId, kind: NodeKind.DIR }),
       makeObservedNode({ rootId: root.rootId, vpath: '/a.txt', name: 'a.txt', runId: run1.runId })
     ]);
-    p1.recordCoverage({ runId: run1.runId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }] });
+    p1.recordCoverage({
+      runId: run1.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
     p1.commit();
 
     const run2 = makeRun(root.rootId, 'run:2');
@@ -40,7 +43,10 @@ describe('DefaultAligner', () => {
       makeObservedNode({ rootId: root.rootId, vpath: '/', name: '', runId: run2.runId, kind: NodeKind.DIR }),
       makeObservedNode({ rootId: root.rootId, vpath: '/b.txt', name: 'b.txt', runId: run2.runId })
     ]);
-    p2.recordCoverage({ runId: run2.runId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }] });
+    p2.recordCoverage({
+      runId: run2.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
     p2.commit();
 
     const aligner = new DefaultAligner(store);

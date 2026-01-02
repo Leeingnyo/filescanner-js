@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeRoot, makeStore, makeObservedNode } from './memoryTestHelpers.js';
-import { RunStatus, ScopeMode, type ScanRun, type Coverage } from '../../types/scan.js';
+import { RunStatus, ScopeCompleteness, ScopeMode, type ScanRun, type Coverage } from '../../types/scan.js';
 import { NodeKind } from '../../types/enums.js';
 import { LayerKind } from '../../types/layers.js';
 
@@ -15,7 +15,10 @@ function makeRun(rootId: string, runId: string): ScanRun {
 }
 
 function fullCoverage(runId: string): Coverage {
-  return { runId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }] };
+  return {
+    runId,
+    scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+  };
 }
 
 describe('MemorySnapshotStore patching', () => {
@@ -114,12 +117,47 @@ describe('MemorySnapshotStore patching', () => {
     session2.upsertNodes([
       makeObservedNode({ rootId: root.rootId, vpath: '/a', name: 'a', runId: run2.runId, kind: NodeKind.DIR })
     ]);
-    session2.recordCoverage({ runId: run2.runId, scopes: [{ baseVPath: '/a', mode: ScopeMode.CHILDREN_ONLY }] });
+    session2.recordCoverage({
+      runId: run2.runId,
+      scopes: [{ scope: { baseVPath: '/a', mode: ScopeMode.CHILDREN_ONLY }, completeness: ScopeCompleteness.COMPLETE }]
+    });
     session2.commit();
 
     const file = store.getNodeByRef(snapshot.snapshotId, { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/a/file.txt' }, true)!;
     const deep = store.getNodeByRef(snapshot.snapshotId, { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/a/sub/deep.txt' }, true)!;
     expect(file.isDeleted).toBe(true);
     expect(deep.isDeleted).toBe(false);
+  });
+
+  it('skips deletion reconciliation for PARTIAL coverage', () => {
+    const store = makeStore();
+    const root = makeRoot('r:4');
+    store.registerRoot(root);
+    const snapshot = store.createSnapshot(root.rootId);
+
+    const run1 = makeRun(root.rootId, 'run:1');
+    const session1 = store.beginPatch(snapshot.snapshotId, run1);
+    session1.upsertNodes([
+      makeObservedNode({ rootId: root.rootId, vpath: '/', name: '', runId: run1.runId, kind: NodeKind.DIR }),
+      makeObservedNode({ rootId: root.rootId, vpath: '/keep.txt', name: 'keep.txt', runId: run1.runId })
+    ]);
+    session1.recordCoverage(fullCoverage(run1.runId));
+    session1.commit();
+
+    const run2 = makeRun(root.rootId, 'run:2');
+    const session2 = store.beginPatch(snapshot.snapshotId, run2);
+    session2.upsertNodes([]);
+    session2.recordCoverage({
+      runId: run2.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.PARTIAL }]
+    });
+    session2.commit();
+
+    const node = store.getNodeByRef(
+      snapshot.snapshotId,
+      { rootId: root.rootId, layers: [{ kind: LayerKind.OS, rootId: root.rootId }], vpath: '/keep.txt' },
+      true
+    )!;
+    expect(node.isDeleted).toBe(false);
   });
 });

@@ -6,7 +6,7 @@ import type { NodeRef } from '../../types/noderef.js';
 import type { NodeQuery, NodeQueryResult, Page } from '../../types/store/query.js';
 import { NodeSortKey, SortOrder } from '../../types/store/query.js';
 import type { Coverage, ScanRun, ScanScope } from '../../types/scan.js';
-import { ScopeMode } from '../../types/scan.js';
+import { ScopeCompleteness, ScopeMode } from '../../types/scan.js';
 import type { ObservedNode } from '../../types/observedNode.js';
 import type { RootId, RootKey, SnapshotId, NodeId, VPath, Instant } from '../../types/ids.js';
 import { CasePolicy, NodeKind } from '../../types/enums.js';
@@ -209,7 +209,8 @@ export class MemorySnapshotStore implements SnapshotStore {
   commitPatchInternal(state: SnapshotState, run: ScanRun, coverage: Coverage): void {
     const casePolicy = this.resolveSnapshotCasePolicy(state.snapshot.rootId);
     for (const scope of coverage.scopes) {
-      this.reconcileScope(state, run.runId, scope, casePolicy);
+      if (scope.completeness !== ScopeCompleteness.COMPLETE) continue;
+      this.reconcileScope(state, run.runId, scope.scope, casePolicy);
     }
     state.snapshot.lastPatchedAt = this.nowFn();
     state.snapshot.lastRunId = run.runId;

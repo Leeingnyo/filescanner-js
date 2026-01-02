@@ -1,10 +1,10 @@
-import type { ScanScope } from '../types/scan.js';
-import { ScopeMode } from '../types/scan.js';
+import type { CoverageScope, ScanScope } from '../types/scan.js';
+import { ScopeCompleteness, ScopeMode } from '../types/scan.js';
 import { vpathHasPrefix } from '../vpath/prefix.js';
 import { isImmediateChild } from '../vpath/normalize.js';
 
-export function isScopeCovered(coverage: ScanScope[], target: ScanScope): boolean {
-  return coverage.some((scope) => coversScope(scope, target));
+export function isScopeCovered(coverage: CoverageScope[], target: ScanScope): boolean {
+  return coverage.some((scope) => scope.completeness === ScopeCompleteness.COMPLETE && coversScope(scope.scope, target));
 }
 
 export function coversScope(cover: ScanScope, target: ScanScope): boolean {

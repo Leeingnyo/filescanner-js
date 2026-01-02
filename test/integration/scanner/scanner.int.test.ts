@@ -6,7 +6,7 @@ import yazl from 'yazl';
 import { FileSystemScanner } from '../../../src/scanner/FileSystemScanner.js';
 import { ArchiveRegistry } from '../../../src/archive/ArchiveRegistry.js';
 import { ZipArchiveReader } from '../../../src/archive/zip/ZipArchiveReader.js';
-import { CasePolicy, OsKind, NodeKind } from '../../../src/types/enums.js';
+import { CasePolicy, OsKind, NodeKind, IdentityPlatform } from '../../../src/types/enums.js';
 import { ScopeMode } from '../../../src/types/scan.js';
 import { ErrorPolicy, SymlinkPolicy } from '../../../src/types/scanPolicy.js';
 import type { ScanRequest } from '../../../src/types/scanRequest.js';
@@ -31,6 +31,8 @@ function createZip(zipPath: string, entries: { name: string; content: string }[]
 }
 
 describe('FileSystemScanner', () => {
+  const itPosix = process.platform === 'win32' ? it.skip : it;
+
   it('respects ignore rules and scope', async () => {
     const dir = createTempDir();
     fs.writeFileSync(path.join(dir, 'keep.txt'), 'ok');
@@ -83,6 +85,54 @@ describe('FileSystemScanner', () => {
     expect(nodes).not.toContain('/skip.ignore');
     expect(nodes).not.toContain('/skipdir');
     expect(nodes).not.toContain('/skipdir/inner.txt');
+  });
+
+  itPosix('captures POSIX identity when supported', async () => {
+    const dir = createTempDir();
+    fs.writeFileSync(path.join(dir, 'id.txt'), 'id');
+
+    const root = {
+      rootId: 'r:3',
+      rootKey: 'posixpath:/tmp',
+      os: OsKind.POSIX,
+      osPath: dir,
+      createdAt: new Date().toISOString(),
+      casePolicy: CasePolicy.AUTO,
+      capabilities: { caseSensitive: true, supportsFileId: true }
+    };
+
+    const scanner = new FileSystemScanner({ getRoot: () => root }, new ArchiveRegistry([new ZipArchiveReader()]));
+    const request: ScanRequest = {
+      snapshotId: 's:1',
+      rootId: root.rootId,
+      scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }],
+      policy: {
+        errorPolicy: ErrorPolicy.CONTINUE_AND_REPORT,
+        symlinkPolicy: SymlinkPolicy.DONT_FOLLOW,
+        archivePolicy: { includeArchives: false, formats: ['zip'], maxNesting: 1, onEncrypted: ErrorPolicy.SKIP_SUBTREE }
+      },
+      ignore: { glob: [], regex: [] },
+      concurrency: { io: 1, cpu: 1 }
+    };
+
+    const nodes: { vpath: string; identity: { platform: IdentityPlatform; isAvailable: boolean; posix?: { dev: number; inode: number } } }[] = [];
+    await new Promise<void>((resolve) => {
+      scanner.startScan(request, {
+        onRunStarted: () => {},
+        onNodes: (batch) => {
+          for (const node of batch) nodes.push({ vpath: node.ref.vpath, identity: node.identity });
+        },
+        onError: () => {},
+        onRunFinished: () => resolve()
+      });
+    });
+
+    const file = nodes.find((node) => node.vpath === '/id.txt');
+    expect(file).toBeTruthy();
+    expect(file?.identity.isAvailable).toBe(true);
+    expect(file?.identity.platform).toBe(IdentityPlatform.POSIX);
+    expect(file?.identity.posix?.dev).toBeTypeOf('number');
+    expect(file?.identity.posix?.inode).toBeTypeOf('number');
   });
 
   it('scans archives when enabled', async () => {

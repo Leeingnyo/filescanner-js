@@ -7,7 +7,7 @@ import type { NodeRef } from '../../types/noderef.js';
 import type { NodeQuery, NodeQueryResult, Page } from '../../types/store/query.js';
 import { NodeSortKey, SortOrder } from '../../types/store/query.js';
 import type { Coverage, ScanRun, ScanScope } from '../../types/scan.js';
-import { ScopeMode } from '../../types/scan.js';
+import { ScopeCompleteness, ScopeMode } from '../../types/scan.js';
 import type { ObservedNode } from '../../types/observedNode.js';
 import type { RootId, RootKey, SnapshotId, NodeId, Instant, VPath } from '../../types/ids.js';
 import { CasePolicy, NodeKind } from '../../types/enums.js';
@@ -276,7 +276,8 @@ export class SqliteSnapshotStore implements SnapshotStore {
     const casePolicy = this.resolveSnapshotCasePolicy(snapshotId);
     const tx = this.db.transaction(() => {
       for (const scope of coverage.scopes) {
-        this.reconcileScope(snapshotId, run.runId, scope, casePolicy);
+        if (scope.completeness !== ScopeCompleteness.COMPLETE) continue;
+        this.reconcileScope(snapshotId, run.runId, scope.scope, casePolicy);
       }
       const stats = this.computeStats(snapshotId);
       const lastPatchedAt = this.nowFn();

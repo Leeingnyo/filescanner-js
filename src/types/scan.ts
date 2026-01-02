@@ -1,4 +1,5 @@
 import type { Instant, RunId, RootId, VPath } from './ids.js';
+import type { NodeError } from './error.js';
 
 export enum ScopeMode {
   SINGLE_NODE = 'SINGLE_NODE',
@@ -27,7 +28,18 @@ export interface ScanRun {
   status: RunStatus;
 }
 
+export enum ScopeCompleteness {
+  COMPLETE = 'COMPLETE',
+  PARTIAL = 'PARTIAL'
+}
+
+export interface CoverageScope {
+  scope: ScanScope;
+  completeness: ScopeCompleteness;
+  errors?: NodeError[];
+}
+
 export interface Coverage {
   runId: RunId;
-  scopes: ScanScope[];
+  scopes: CoverageScope[];
 }

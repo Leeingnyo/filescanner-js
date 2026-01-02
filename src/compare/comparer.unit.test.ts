@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemorySnapshotStore } from '../store/memory/MemorySnapshotStore.js';
 import { makeObservedNode, makeRoot } from '../store/memory/memoryTestHelpers.js';
-import { RunStatus, ScopeMode } from '../types/scan.js';
+import { RunStatus, ScopeCompleteness, ScopeMode } from '../types/scan.js';
 import { DefaultComparer } from './DefaultComparer.js';
 import { CompareMode, Confidence, ConflictHandling, EvidenceType } from '../types/compare.js';
 import { NodeKind } from '../types/enums.js';
@@ -31,7 +31,10 @@ describe('DefaultComparer', () => {
       makeObservedNode({ rootId: root.rootId, vpath: '/a.txt', name: 'a.txt', runId: run1.runId, identity: { dev: 1, inode: 2 }, size: 10 }),
       makeObservedNode({ rootId: root.rootId, vpath: '/same.txt', name: 'same.txt', runId: run1.runId, size: 5 })
     ]);
-    s1.recordCoverage({ runId: run1.runId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }] });
+    s1.recordCoverage({
+      runId: run1.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
     s1.commit();
 
     const run2 = makeRun(root.rootId, 'run:2');
@@ -41,7 +44,10 @@ describe('DefaultComparer', () => {
       makeObservedNode({ rootId: root.rootId, vpath: '/b.txt', name: 'b.txt', runId: run2.runId, identity: { dev: 1, inode: 2 }, size: 10 }),
       makeObservedNode({ rootId: root.rootId, vpath: '/same.txt', name: 'same.txt', runId: run2.runId, size: 7 })
     ]);
-    s2.recordCoverage({ runId: run2.runId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }] });
+    s2.recordCoverage({
+      runId: run2.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
     s2.commit();
 
     const comparer = new DefaultComparer(store);

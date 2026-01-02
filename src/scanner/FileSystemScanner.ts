@@ -6,7 +6,7 @@ import type { ScanSink } from '../types/scanner.js';
 import type { ScanRun, Coverage } from '../types/scan.js';
 import { RunStatus, ScopeMode } from '../types/scan.js';
 import { ErrorStage, ErrorCode, NodeKind, IdentityPlatform } from '../types/enums.js';
-import { SymlinkPolicy } from '../types/scanPolicy.js';
+import { ErrorPolicy, SymlinkPolicy } from '../types/scanPolicy.js';
 import type { ObservedNode } from '../types/observedNode.js';
 import type { NodeRef } from '../types/noderef.js';
 import type { RootDescriptor } from '../types/root.js';
@@ -22,6 +22,8 @@ import { guessArchiveFormat } from '../archive/format.js';
 import { LayerKind, type VfsLayer } from '../types/layers.js';
 import { resolveCasePolicy } from '../root/casePolicy.js';
 import { readStreamToBuffer } from '../utils/streams.js';
+import { CoverageTracker } from './coverageTracker.js';
+import { identityFromStat } from './identity.js';
 
 interface RootProvider {
   getRoot(rootId: string): RootDescriptor;
@@ -42,6 +44,7 @@ export class FileSystemScanner implements Scanner {
       status: RunStatus.RUNNING
     };
     let canceled = false;
+    let failed = false;
     const control = {
       cancel() {
         canceled = true;
@@ -53,7 +56,7 @@ export class FileSystemScanner implements Scanner {
     const visited = new Set<string>([rootRealPath]);
     const casePolicy = resolveCasePolicy(root.casePolicy, root.capabilities);
     const ignoreMatcher = new IgnoreMatcher(req.ignore, casePolicy);
-    const coverage: Coverage = { runId, scopes: req.scopes };
+    const coverageTracker = new CoverageTracker(runId, req.scopes);
     const batch: ObservedNode[] = [];
 
     const flush = () => {
@@ -69,8 +72,25 @@ export class FileSystemScanner implements Scanner {
       }
     };
 
-    const scanFileSystem = async (vpath: VPath, scopeMode: ScopeMode, allowDescend: boolean, nesting: number) => {
-      if (canceled) return;
+    const recordError = (coverageIndex: number | null, error: any) => {
+      coverageTracker.recordError(coverageIndex, error);
+      if (req.policy.errorPolicy === ErrorPolicy.FAIL_FAST) {
+        failed = true;
+        canceled = true;
+      }
+    };
+
+    const scanFileSystem = async (
+      vpath: VPath,
+      scopeMode: ScopeMode,
+      allowDescend: boolean,
+      nesting: number,
+      coverageIndex: number | null
+    ) => {
+      if (canceled) {
+        if (coverageIndex !== null) coverageTracker.markPartial(coverageIndex);
+        return;
+      }
       if (vpath !== '/' && ignoreMatcher.isIgnored(vpath)) {
         return;
       }
@@ -82,6 +102,7 @@ export class FileSystemScanner implements Scanner {
         const error = mapFsError(err, ErrorStage.STAT);
         emitNode(this.errorNode(vpath, root, runId, error));
         sink.onError(error);
+        recordError(coverageIndex, error);
         return;
       }
 
@@ -119,6 +140,7 @@ export class FileSystemScanner implements Scanner {
             const error = mapFsError(err, ErrorStage.STAT);
             nodeErrors.push(error);
             sink.onError(error);
+            recordError(coverageIndex, error);
             canDescend = false;
           }
         }
@@ -128,7 +150,17 @@ export class FileSystemScanner implements Scanner {
       emitNode(node);
 
       if (kind === NodeKind.FILE && req.policy.archivePolicy.includeArchives) {
-        await this.scanArchiveIfNeeded(root, vpath, runId, req.policy, ignoreMatcher, emitNode, nesting, sink);
+        await this.scanArchiveIfNeeded(
+          root,
+          vpath,
+          runId,
+          req.policy,
+          ignoreMatcher,
+          emitNode,
+          nesting,
+          sink,
+          (error) => recordError(coverageIndex, error)
+        );
       }
 
       const shouldDescend = (kind === NodeKind.DIR) || (stat.isSymbolicLink() && canDescend);
@@ -141,36 +173,42 @@ export class FileSystemScanner implements Scanner {
         const error = mapFsError(err, ErrorStage.LIST);
         node.errors.push(error);
         sink.onError(error);
+        recordError(coverageIndex, error);
         return;
       }
 
       for (const entry of entries) {
         const childVPath = appendVPath(vpath, entry.name);
         if (scopeMode === ScopeMode.CHILDREN_ONLY) {
-          await scanFileSystem(childVPath, scopeMode, false, nesting);
+          await scanFileSystem(childVPath, scopeMode, false, nesting, coverageIndex);
         } else {
-          await scanFileSystem(childVPath, scopeMode, true, nesting);
+          await scanFileSystem(childVPath, scopeMode, true, nesting, coverageIndex);
         }
       }
     };
 
     const runScan = async () => {
       sink.onRunStarted(run);
-      await scanFileSystem('/', ScopeMode.SINGLE_NODE, false, 0);
-      for (const scope of req.scopes) {
-        if (canceled) break;
+      await scanFileSystem('/', ScopeMode.SINGLE_NODE, false, 0, null);
+      for (let i = 0; i < req.scopes.length; i += 1) {
+        if (canceled) {
+          coverageTracker.markRemainingPartial(i);
+          break;
+        }
+        const scope = req.scopes[i];
         const base = scope.baseVPath;
         if (scope.mode === ScopeMode.SINGLE_NODE) {
-          await scanFileSystem(base, scope.mode, false, 0);
+          await scanFileSystem(base, scope.mode, false, 0, i);
         } else if (scope.mode === ScopeMode.CHILDREN_ONLY) {
-          await scanFileSystem(base, scope.mode, true, 0);
+          await scanFileSystem(base, scope.mode, true, 0, i);
         } else {
-          await scanFileSystem(base, scope.mode, true, 0);
+          await scanFileSystem(base, scope.mode, true, 0, i);
         }
       }
       flush();
-      run.status = canceled ? RunStatus.CANCELED : RunStatus.FINISHED;
+      run.status = failed ? RunStatus.FAILED : canceled ? RunStatus.CANCELED : RunStatus.FINISHED;
       run.finishedAt = nowInstant();
+      const coverage: Coverage = coverageTracker.finalize();
       sink.onRunFinished(run, coverage);
     };
 
@@ -187,7 +225,7 @@ export class FileSystemScanner implements Scanner {
     errors: any[] = []
   ): ObservedNode {
     const name = vpath === '/' ? '' : path.posix.basename(vpath);
-    const identity = { platform: IdentityPlatform.UNKNOWN, isAvailable: false };
+    const identity = identityFromStat(root, stat);
     const layers: VfsLayer[] = [{ kind: LayerKind.OS, rootId: root.rootId }];
     return {
       ref: { rootId: root.rootId, layers, vpath },
@@ -229,7 +267,8 @@ export class FileSystemScanner implements Scanner {
     ignore: IgnoreMatcher,
     emitNode: (node: ObservedNode) => void,
     nesting: number,
-    sink: ScanSink
+    sink: ScanSink,
+    recordError: (error: any) => void
   ): Promise<void> {
     const format = guessArchiveFormat(vpath);
     if (!format) return;
@@ -330,12 +369,14 @@ export class FileSystemScanner implements Scanner {
             ? { code: rawCode, stage: ErrorStage.ARCHIVE_LIST, message: err.message, retryable: false, at: nowInstant() }
             : mapFsError(err, ErrorStage.ARCHIVE_LIST);
           sink.onError(error);
+          recordError(error);
         }
       }
       handle.close();
     } catch (err) {
       const error = mapFsError(err, ErrorStage.ARCHIVE_LIST);
       sink.onError(error);
+      recordError(error);
     }
     return;
   }
