@@ -13,12 +13,15 @@ describe('E2E partial coverage behavior', () => {
     const baseDir = createTempDir('e2e-partial-');
     let store: ReturnType<typeof createSqliteStore> | undefined;
     try {
+      // Step 1: create minimal content to scan.
       fs.writeFileSync(path.join(baseDir, 'file.txt'), 'data');
 
+      // Step 2: sqlite store + root registration.
       store = createSqliteStore(baseDir);
       const root = makeRoot('r:partial', baseDir);
       store.registerRoot(root);
 
+      // Step 3: first scan is canceled to force PARTIAL coverage.
       const snapshotPartial = store.createSnapshot(root.rootId);
       await scanAndPersist({
         store,
@@ -29,6 +32,7 @@ describe('E2E partial coverage behavior', () => {
         cancel: true
       });
 
+      // Step 4: second scan completes fully to compare against.
       const snapshotFull = store.createSnapshot(root.rootId);
       await scanAndPersist({
         store,
@@ -38,6 +42,7 @@ describe('E2E partial coverage behavior', () => {
         includeArchives: false
       });
 
+      // Step 5: require observed coverage; expect NOT_COVERED.
       const comparer = new DefaultComparer(store);
       const result = comparer.compare(snapshotPartial.snapshotId, snapshotFull.snapshotId, {
         mode: CompareMode.STRICT,

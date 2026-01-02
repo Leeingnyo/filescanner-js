@@ -11,6 +11,7 @@ import { createTempDir, cleanupTempDir, createSqliteStore, makeRoot, scanAndPers
 describe('E2E compare A/B/C', () => {
   it('treats A and B as same, and C as different', async () => {
     const baseDir = createTempDir('e2e-compare-');
+    // Three independent roots to compare.
     const dirA = path.join(baseDir, 'A');
     const dirB = path.join(baseDir, 'B');
     const dirC = path.join(baseDir, 'C');
@@ -29,6 +30,7 @@ describe('E2E compare A/B/C', () => {
       fs.writeFileSync(path.join(dirB, 'data', 'file.txt'), 'same-content');
       fs.writeFileSync(path.join(dirC, 'data', 'file.txt'), 'different-content-here');
 
+      // Create a persistent store so we exercise the sqlite-backed flow.
       store = createSqliteStore(baseDir);
       const rootA = makeRoot('r:A', dirA);
       const rootB = makeRoot('r:B', dirB);
@@ -37,6 +39,7 @@ describe('E2E compare A/B/C', () => {
       store.registerRoot(rootB);
       store.registerRoot(rootC);
 
+      // One snapshot per root, each populated by a scan.
       const snapA = store.createSnapshot(rootA.rootId);
       const snapB = store.createSnapshot(rootB.rootId);
       const snapC = store.createSnapshot(rootC.rootId);
@@ -46,6 +49,7 @@ describe('E2E compare A/B/C', () => {
       await scanAndPersist({ store, root: rootB, snapshotId: snapB.snapshotId, scopes: [{ baseVPath: '/data', mode: ScopeMode.FULL_SUBTREE }], includeArchives: false });
       await scanAndPersist({ store, root: rootC, snapshotId: snapC.snapshotId, scopes: [{ baseVPath: '/data', mode: ScopeMode.FULL_SUBTREE }], includeArchives: false });
 
+      // Compare using VPATH + SIZE so same content matches and size changes are detected.
       const comparer = new DefaultComparer(store);
       const options = {
         mode: CompareMode.STRICT,

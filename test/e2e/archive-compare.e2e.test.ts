@@ -8,10 +8,12 @@ import { LayerKind } from '../../src/types/layers.js';
 import { createTempDir, cleanupTempDir, createSqliteStore, makeRoot, scanAndPersist, createZip } from './helpers.js';
 
 // E2E: Archive-aware comparison across snapshots.
-// A and B contain identical zip entries; C has the same zip name but different contents.
+// A uses a plain directory, B uses a zip archive with the same file, and C uses a zip
+// archive with different contents. We compare A↔B (same) and A↔C (different).
 describe('E2E archive-aware compare', () => {
-  it('treats identical archives as same and different archives as modified', async () => {
+  it('compares a directory to archives with same/different contents', async () => {
     const baseDir = createTempDir('e2e-archive-');
+    // Create three roots under a shared temp base; each test still has its own temp dir.
     const dirA = path.join(baseDir, 'A');
     const dirB = path.join(baseDir, 'B');
     const dirC = path.join(baseDir, 'C');
@@ -21,12 +23,16 @@ describe('E2E archive-aware compare', () => {
 
     let store: ReturnType<typeof createSqliteStore> | undefined;
     try {
-      // Create identical zip archives in A and B, and a different one in C.
-      await createZip(path.join(dirA, 'archive.zip'), [{ name: 'data/file.txt', content: 'same' }]);
+      // A: plain directory with a file.
+      fs.mkdirSync(path.join(dirA, 'data'), { recursive: true });
+      fs.writeFileSync(path.join(dirA, 'data', 'file.txt'), 'same');
+
+      // B/C: archives containing the same path as A.
       await createZip(path.join(dirB, 'archive.zip'), [{ name: 'data/file.txt', content: 'same' }]);
       await createZip(path.join(dirC, 'archive.zip'), [{ name: 'data/file.txt', content: 'different-content' }]);
 
       store = createSqliteStore(baseDir);
+      // Register each root separately so snapshots can be compared across roots.
       const rootA = makeRoot('r:A', dirA);
       const rootB = makeRoot('r:B', dirB);
       const rootC = makeRoot('r:C', dirC);
@@ -38,16 +44,18 @@ describe('E2E archive-aware compare', () => {
       const snapB = store.createSnapshot(rootB.rootId);
       const snapC = store.createSnapshot(rootC.rootId);
 
-      // Include archive scanning so zip entries become part of the snapshot.
+      // Include archive scanning so zip entries are materialized in snapshots.
       await scanAndPersist({ store, root: rootA, snapshotId: snapA.snapshotId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }], includeArchives: true });
       await scanAndPersist({ store, root: rootB, snapshotId: snapB.snapshotId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }], includeArchives: true });
       await scanAndPersist({ store, root: rootC, snapshotId: snapC.snapshotId, scopes: [{ baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }], includeArchives: true });
 
+      // We compare only a single node so directory entries do not affect the result.
       const comparer = new DefaultComparer(store);
       const options = {
         mode: CompareMode.STRICT,
-        scope: { baseVPath: '/data', mode: ScopeMode.FULL_SUBTREE },
+        scope: { baseVPath: '/data/file.txt', mode: ScopeMode.SINGLE_NODE },
         identity: {
+          // Match by VPATH + SIZE to detect content changes without relying on hashes.
           strategies: [
             { type: EvidenceType.VPATH, weight: 1 },
             { type: EvidenceType.SIZE, weight: 1 }
@@ -60,13 +68,10 @@ describe('E2E archive-aware compare', () => {
         requireObservedCoverage: true
       };
 
-      // Compare inside the archive layer (archive root as the base).
+      // Compare A (OS layer) against B/C (archive layer).
       const baseA = {
         rootId: rootA.rootId,
-        layers: [
-          { kind: LayerKind.OS, rootId: rootA.rootId },
-          { kind: LayerKind.ARCHIVE, format: 'zip', containerVPath: '/archive.zip' }
-        ],
+        layers: [{ kind: LayerKind.OS, rootId: rootA.rootId }],
         vpath: '/'
       };
       const baseB = {
@@ -86,14 +91,15 @@ describe('E2E archive-aware compare', () => {
         vpath: '/'
       };
 
+      // A vs B should be equivalent for the single file.
       const same = comparer.compareSubtree(snapA.snapshotId, baseA as any, snapB.snapshotId, baseB as any, options);
       expect(same.summary.modified).toBe(0);
       expect(same.summary.added).toBe(0);
       expect(same.summary.removed).toBe(0);
 
+      // A vs C should show a modification for the file.
       const different = comparer.compareSubtree(snapA.snapshotId, baseA as any, snapC.snapshotId, baseC as any, options);
-      const hasDiff = different.entries.some((entry) => entry.type !== 'NOT_COVERED' && entry.type !== 'UNKNOWN');
-      expect(hasDiff).toBe(true);
+      expect(different.summary.modified).toBeGreaterThan(0);
     } finally {
       store?.close();
       cleanupTempDir(baseDir);

@@ -24,6 +24,7 @@ export function createTempDir(prefix = 'filescanner-e2e-'): string {
 }
 
 // Cleanup helper that always removes the temp tree for a test.
+// We keep cleanup explicit inside each test to avoid shared global state.
 export function cleanupTempDir(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
 }
@@ -82,7 +83,9 @@ export function makePolicy(includeArchives: boolean): ScanPolicy {
   };
 }
 
+// Default ignore rules keep tests explicit and deterministic.
 export const defaultIgnore: IgnoreRules = { glob: [], regex: [] };
+// Force single-thread scanning to avoid timing variance in E2E tests.
 export const defaultConcurrency: Concurrency = { io: 1, cpu: 1 };
 
 // Scan a root and persist the results into an existing snapshot.
@@ -107,6 +110,7 @@ export async function scanAndPersist(params: {
   };
 
   // Collect nodes in memory to simulate a full scan ingest into the store.
+  // This is close to how a real consumer would wire ScanSink to persistence.
   const nodes: ObservedNode[] = [];
   let run: ScanRun | undefined;
   let coverage: Coverage | undefined;

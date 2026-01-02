@@ -15,15 +15,17 @@ describe('E2E move detection', () => {
     const baseDir = createTempDir('e2e-move-');
     let store: ReturnType<typeof createSqliteStore> | undefined;
     try {
-      // Create a file, scan, then rename it (same inode).
+      // Step 1: create a file we will rename later.
       // Keep content under /data to avoid the "/" prefix edge case for subtree queries.
       fs.mkdirSync(path.join(baseDir, 'data'), { recursive: true });
       fs.writeFileSync(path.join(baseDir, 'data', 'before.txt'), 'move-me');
 
+      // Step 2: create a sqlite-backed store and register the root.
       store = createSqliteStore(baseDir);
       const root = makeRoot('r:move', baseDir, true);
       store.registerRoot(root);
 
+      // Step 3: snapshot before the rename.
       const snapBefore = store.createSnapshot(root.rootId);
       await scanAndPersist({
         store,
@@ -33,8 +35,10 @@ describe('E2E move detection', () => {
         includeArchives: false
       });
 
+      // Step 4: rename the file in-place (inode stays the same).
       fs.renameSync(path.join(baseDir, 'data', 'before.txt'), path.join(baseDir, 'data', 'after.txt'));
 
+      // Step 5: snapshot after the rename.
       const snapAfter = store.createSnapshot(root.rootId);
       await scanAndPersist({
         store,
@@ -44,6 +48,7 @@ describe('E2E move detection', () => {
         includeArchives: false
       });
 
+      // Step 6: compare with move detection enabled using OS_FILE_ID evidence.
       const comparer = new DefaultComparer(store);
       const result = comparer.compare(snapBefore.snapshotId, snapAfter.snapshotId, {
         mode: CompareMode.STRICT,

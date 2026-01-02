@@ -12,9 +12,11 @@ describe('E2E tombstones', () => {
     const baseDir = createTempDir('e2e-tombstone-');
     let store: ReturnType<typeof createSqliteStore> | undefined;
     try {
+      // Step 1: initial file exists.
       const filePath = path.join(baseDir, 'keep.txt');
       fs.writeFileSync(filePath, 'keep');
 
+      // Step 2: sqlite store + root registration.
       store = createSqliteStore(baseDir);
       const root = makeRoot('r:ts', baseDir);
       store.registerRoot(root);
