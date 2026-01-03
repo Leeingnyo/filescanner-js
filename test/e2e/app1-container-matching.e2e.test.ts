@@ -65,6 +65,7 @@ describe('E2E App1 container matching', () => {
       ]);
 
       // --- Step 2: scan into sqlite snapshots (include archives) ---
+      const scopeBase = '/root';
       store = createSqliteStore(baseDir);
       const rootFoo = makeRoot('r:foo', fooDir);
       const rootBar = makeRoot('r:bar', barDir);
@@ -73,15 +74,27 @@ describe('E2E App1 container matching', () => {
 
       const snapFoo = store.createSnapshot(rootFoo.rootId);
       const snapBar = store.createSnapshot(rootBar.rootId);
-      await scanAndPersist({ store, root: rootFoo, snapshotId: snapFoo.snapshotId, scopes: [{ baseVPath: '/root', mode: ScopeMode.FULL_SUBTREE }], includeArchives: true });
-      await scanAndPersist({ store, root: rootBar, snapshotId: snapBar.snapshotId, scopes: [{ baseVPath: '/root', mode: ScopeMode.FULL_SUBTREE }], includeArchives: true });
+      await scanAndPersist({
+        store,
+        root: rootFoo,
+        snapshotId: snapFoo.snapshotId,
+        scopes: [{ baseVPath: scopeBase, mode: ScopeMode.FULL_SUBTREE }],
+        includeArchives: true
+      });
+      await scanAndPersist({
+        store,
+        root: rootBar,
+        snapshotId: snapBar.snapshotId,
+        scopes: [{ baseVPath: scopeBase, mode: ScopeMode.FULL_SUBTREE }],
+        includeArchives: true
+      });
 
       // --- Step 3: raw diff (OS layer only) ---
       // This represents the “diff only view” before App1’s container matching.
       const comparer = new DefaultComparer(store);
       const rawDiff = comparer.compare(snapFoo.snapshotId, snapBar.snapshotId, {
         mode: CompareMode.STRICT,
-        scope: { baseVPath: '/root', mode: ScopeMode.FULL_SUBTREE },
+        scope: { baseVPath: scopeBase, mode: ScopeMode.FULL_SUBTREE },
         identity: {
           strategies: [
             { type: EvidenceType.VPATH, weight: 1 },
@@ -111,8 +124,8 @@ describe('E2E App1 container matching', () => {
       // We only look for containers where a zip exists.
       // For each zip, we check if a same-name directory exists on either side
       // and compare subtree contents using compareSubtree.
-      const fooNodes = store.queryNodes(snapFoo.snapshotId, { filter: { vpathPrefix: '/root' } }).nodes;
-      const barNodes = store.queryNodes(snapBar.snapshotId, { filter: { vpathPrefix: '/root' } }).nodes;
+      const fooNodes = store.queryNodes(snapFoo.snapshotId, { filter: { vpathPrefix: scopeBase } }).nodes;
+      const barNodes = store.queryNodes(snapBar.snapshotId, { filter: { vpathPrefix: scopeBase } }).nodes;
 
       // Index directories by vpath for quick lookup.
       const fooDirs = new Set(fooNodes.filter((n) => n.kind === NodeKind.DIR && n.ref.layers.length === 1).map((n) => n.ref.vpath));
@@ -126,8 +139,17 @@ describe('E2E App1 container matching', () => {
       // Helper: derive container key from "/root/backup.zip" -> "/root/backup".
       const containerKeyFromZip = (zipVPath: string) => zipVPath.replace(/\.zip$/i, '');
 
+      type ContainerComparison = {
+        containerKey: string;
+        zipVPath: string;
+        fooHasDir: boolean;
+        barHasDir: boolean;
+        fooVsBarZip: boolean;
+        barDirVsZip: boolean;
+      };
+
       // For each zip in bar, compare with any matching directory in foo and bar.
-      const containerComparisons: Array<{ container: string; fooVsBarZip: boolean; barDirVsZip: boolean }> = [];
+      const containerComparisons: ContainerComparison[] = [];
       for (const zipVPath of barZips) {
         const containerKey = containerKeyFromZip(zipVPath);
 
@@ -207,12 +229,72 @@ describe('E2E App1 container matching', () => {
           barDirVsZip = compare.summary.modified === 0 && compare.summary.added === 0 && compare.summary.removed === 0;
         }
 
-        containerComparisons.push({ container: containerKey, fooVsBarZip, barDirVsZip });
+        containerComparisons.push({ containerKey, zipVPath, fooHasDir, barHasDir, fooVsBarZip, barDirVsZip });
       }
 
-      // --- Step 5: Assertions that reflect the App1 scenario ---
-      const backup = containerComparisons.find((c) => c.container.endsWith('/backup'));
-      const baz = containerComparisons.find((c) => c.container.endsWith('/baz'));
+      // --- Step 5: Build a UI-facing "display model" from raw diff + container matches ---
+      // App1 only wants to show differences, but it also wants to display container pairs
+      // when a zip exists so the user can see that contents still match (green indicator).
+      const toDisplayPath = (absVPath: string) => {
+        if (absVPath === scopeBase) return '/';
+        if (absVPath.startsWith(`${scopeBase}/`)) return absVPath.slice(scopeBase.length);
+        return absVPath;
+      };
+
+      type DisplayEntry = {
+        side: 'left' | 'right';
+        kind: 'dir' | 'zip';
+        vpath: string;
+        contentEqual: boolean;
+      };
+
+      type DisplayRow = {
+        displayKey: string;
+        entries: DisplayEntry[];
+      };
+
+      const diffPathSet = new Set(diffPaths);
+      const displayModel: DisplayRow[] = containerComparisons
+        .map((comparison) => {
+          const entries: DisplayEntry[] = [];
+          if (comparison.fooHasDir) {
+            entries.push({
+              side: 'left',
+              kind: 'dir',
+              vpath: toDisplayPath(comparison.containerKey),
+              contentEqual: comparison.fooVsBarZip
+            });
+          }
+          if (comparison.barHasDir) {
+            entries.push({
+              side: 'right',
+              kind: 'dir',
+              vpath: toDisplayPath(comparison.containerKey),
+              contentEqual: comparison.barDirVsZip
+            });
+          }
+          entries.push({
+            side: 'right',
+            kind: 'zip',
+            vpath: toDisplayPath(comparison.zipVPath),
+            contentEqual: comparison.fooVsBarZip || comparison.barDirVsZip
+          });
+          entries.sort((a, b) => {
+            if (a.side !== b.side) return a.side === 'left' ? -1 : 1;
+            if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
+            return a.vpath.localeCompare(b.vpath);
+          });
+          return {
+            displayKey: toDisplayPath(comparison.containerKey),
+            entries
+          };
+        })
+        .filter((row) => row.entries.some((entry) => diffPathSet.has(entry.vpath)))
+        .sort((a, b) => a.displayKey.localeCompare(b.displayKey));
+
+      // --- Step 6: Assertions that reflect the App1 scenario ---
+      const backup = containerComparisons.find((c) => c.containerKey.endsWith('/backup'));
+      const baz = containerComparisons.find((c) => c.containerKey.endsWith('/baz'));
 
       // backup: foo dir vs bar zip is equivalent (green indicator).
       expect(backup?.fooVsBarZip).toBe(true);
@@ -223,6 +305,25 @@ describe('E2E App1 container matching', () => {
       expect(baz?.fooVsBarZip).toBe(true);
       // baz: bar has no baz dir, so duplicate comparison is false by design.
       expect(baz?.barDirVsZip).toBe(false);
+
+      // Display model: only backup and baz appear in diff-only view.
+      expect(displayModel.map((row) => row.displayKey).sort()).toEqual(['/backup', '/baz']);
+
+      const backupRow = displayModel.find((row) => row.displayKey === '/backup');
+      const bazRow = displayModel.find((row) => row.displayKey === '/baz');
+
+      // backup row shows foo dir, bar dir, and bar zip — all content-equal.
+      expect(backupRow?.entries).toEqual([
+        { side: 'left', kind: 'dir', vpath: '/backup', contentEqual: true },
+        { side: 'right', kind: 'dir', vpath: '/backup', contentEqual: true },
+        { side: 'right', kind: 'zip', vpath: '/backup.zip', contentEqual: true }
+      ]);
+
+      // baz row shows foo dir and bar zip — content-equal despite container mismatch.
+      expect(bazRow?.entries).toEqual([
+        { side: 'left', kind: 'dir', vpath: '/baz', contentEqual: true },
+        { side: 'right', kind: 'zip', vpath: '/baz.zip', contentEqual: true }
+      ]);
     } finally {
       store?.close();
       cleanupTempDir(baseDir);
