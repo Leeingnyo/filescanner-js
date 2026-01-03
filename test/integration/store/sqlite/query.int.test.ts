@@ -77,6 +77,31 @@ describe('SqliteSnapshotStore queries', () => {
     store.close();
   });
 
+  it('treats "/" vpathPrefix as the entire tree', () => {
+    const store = makeStore();
+    const root = makeRoot('r:4');
+    store.registerRoot(root);
+    const snapshot = store.createSnapshot(root.rootId);
+
+    const run = makeRun(root.rootId, 'run:1');
+    const session = store.beginPatch(snapshot.snapshotId, run);
+    session.upsertNodes([
+      makeObservedNode({ rootId: root.rootId, vpath: '/', name: '', runId: run.runId, kind: NodeKind.DIR }),
+      makeObservedNode({ rootId: root.rootId, vpath: '/alpha.txt', name: 'alpha.txt', runId: run.runId }),
+      makeObservedNode({ rootId: root.rootId, vpath: '/nested/beta.txt', name: 'beta.txt', runId: run.runId })
+    ]);
+    session.recordCoverage({
+      runId: run.runId,
+      scopes: [{ scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE }, completeness: ScopeCompleteness.COMPLETE }]
+    });
+    session.commit();
+
+    const all = store.queryNodes(snapshot.snapshotId, { filter: { vpathPrefix: '/' } });
+    const names = all.nodes.map((node) => node.name).sort();
+    expect(names).toEqual(['', 'alpha.txt', 'beta.txt']);
+    store.close();
+  });
+
   it('paginates deterministically for tied sort keys', () => {
     const store = makeStore();
     const root = makeRoot('r:3');
