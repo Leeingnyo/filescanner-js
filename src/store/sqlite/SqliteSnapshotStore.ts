@@ -223,9 +223,15 @@ export class SqliteSnapshotStore implements SnapshotStore {
     if (filter.vpathPrefix) {
       const casePolicy = this.resolveSnapshotCasePolicy(snapshotId);
       const prefix = vpathKey(filter.vpathPrefix, casePolicy);
-      const like = `${prefix}/%`;
-      clauses.push('(n.vpathKey = ? OR n.vpathKey LIKE ?)');
-      params.push(prefix, like);
+      if (prefix === '/') {
+        // Root prefix should match every absolute vpath, including the root itself.
+        clauses.push('n.vpathKey LIKE ?');
+        params.push('/%');
+      } else {
+        const like = `${prefix}/%`;
+        clauses.push('(n.vpathKey = ? OR n.vpathKey LIKE ?)');
+        params.push(prefix, like);
+      }
     }
     if (filter.observedInRunId) {
       clauses.push('n.observedInRunId = ?');
