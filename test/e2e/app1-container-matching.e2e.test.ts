@@ -34,21 +34,35 @@ describe('E2E App1 container matching', () => {
       fs.mkdirSync(fooRoot, { recursive: true });
       fs.mkdirSync(barRoot, { recursive: true });
 
-      // foo fixtures
+      // foo fixtures (add a nested depth to make subtree comparisons non-trivial)
       fs.mkdirSync(path.join(fooRoot, 'others'), { recursive: true });
       fs.mkdirSync(path.join(fooRoot, 'backup'), { recursive: true });
       fs.mkdirSync(path.join(fooRoot, 'baz'), { recursive: true });
+      fs.mkdirSync(path.join(fooRoot, 'backup', 'nested'), { recursive: true });
+      fs.mkdirSync(path.join(fooRoot, 'baz', 'nested'), { recursive: true });
       fs.writeFileSync(path.join(fooRoot, 'others', 'B.txt'), 'B');
       fs.writeFileSync(path.join(fooRoot, 'backup', 'A.txt'), 'A');
       fs.writeFileSync(path.join(fooRoot, 'baz', 'C.txt'), 'C');
+      fs.writeFileSync(path.join(fooRoot, 'backup', 'nested', 'AA.txt'), 'AA');
+      fs.writeFileSync(path.join(fooRoot, 'baz', 'nested', 'CC.txt'), 'CC');
 
       // bar fixtures (folders + archives)
       fs.mkdirSync(path.join(barRoot, 'others'), { recursive: true });
       fs.mkdirSync(path.join(barRoot, 'backup'), { recursive: true });
+      fs.mkdirSync(path.join(barRoot, 'backup', 'nested'), { recursive: true });
       fs.writeFileSync(path.join(barRoot, 'others', 'B.txt'), 'B');
       fs.writeFileSync(path.join(barRoot, 'backup', 'A.txt'), 'A');
-      await createZip(path.join(barRoot, 'backup.zip'), [{ name: 'A.txt', content: 'A' }]);
-      await createZip(path.join(barRoot, 'baz.zip'), [{ name: 'C.txt', content: 'C' }]);
+      fs.writeFileSync(path.join(barRoot, 'backup', 'nested', 'AA.txt'), 'AA');
+      await createZip(path.join(barRoot, 'backup.zip'), [
+        { name: 'nested/', dir: true },
+        { name: 'A.txt', content: 'A' },
+        { name: 'nested/AA.txt', content: 'AA' }
+      ]);
+      await createZip(path.join(barRoot, 'baz.zip'), [
+        { name: 'nested/', dir: true },
+        { name: 'C.txt', content: 'C' },
+        { name: 'nested/CC.txt', content: 'CC' }
+      ]);
 
       // --- Step 2: scan into sqlite snapshots (include archives) ---
       store = createSqliteStore(baseDir);
@@ -78,7 +92,7 @@ describe('E2E App1 container matching', () => {
           casePolicy: 'SENSITIVE'
         },
         move: { enabled: false, strategies: [], minConfidence: Confidence.POSSIBLE },
-        requireObservedCoverage: true
+        requireObservedCoverage: false
       });
 
       const diffPaths = rawDiff.entries.map((entry) => entry.path).sort();
@@ -116,7 +130,6 @@ describe('E2E App1 container matching', () => {
       const containerComparisons: Array<{ container: string; fooVsBarZip: boolean; barDirVsZip: boolean }> = [];
       for (const zipVPath of barZips) {
         const containerKey = containerKeyFromZip(zipVPath);
-        const fileName = containerKey.endsWith('/backup') ? '/A.txt' : '/C.txt';
 
         const fooHasDir = fooDirs.has(containerKey);
         const barHasDir = barDirs.has(containerKey);
@@ -125,7 +138,7 @@ describe('E2E App1 container matching', () => {
         let barDirVsZip = false;
 
         if (fooHasDir) {
-          // Compare foo’s directory against bar’s zip contents at a single file node.
+          // Compare foo’s directory against bar’s zip contents using FULL_SUBTREE.
           const baseFoo = { rootId: rootFoo.rootId, layers: [{ kind: LayerKind.OS, rootId: rootFoo.rootId }], vpath: containerKey };
           const baseBarZip = {
             rootId: rootBar.rootId,
@@ -142,7 +155,7 @@ describe('E2E App1 container matching', () => {
             baseBarZip as any,
             {
               mode: CompareMode.STRICT,
-              scope: { baseVPath: fileName, mode: ScopeMode.SINGLE_NODE },
+              scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE },
               identity: {
                 strategies: [
                   { type: EvidenceType.VPATH, weight: 1 },
@@ -177,7 +190,7 @@ describe('E2E App1 container matching', () => {
             baseBarZip as any,
             {
               mode: CompareMode.STRICT,
-              scope: { baseVPath: fileName, mode: ScopeMode.SINGLE_NODE },
+              scope: { baseVPath: '/', mode: ScopeMode.FULL_SUBTREE },
               identity: {
                 strategies: [
                   { type: EvidenceType.VPATH, weight: 1 },

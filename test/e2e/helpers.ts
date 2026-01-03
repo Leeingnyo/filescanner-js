@@ -31,10 +31,18 @@ export function cleanupTempDir(dir: string): void {
 
 // Create a small zip archive at zipPath with a list of entries.
 // This is used by archive-aware E2E tests and keeps fixtures in-code only.
-export function createZip(zipPath: string, entries: { name: string; content: string }[]): Promise<void> {
+export function createZip(
+  zipPath: string,
+  entries: { name: string; content?: string; dir?: boolean }[]
+): Promise<void> {
   const zip = new yazl.ZipFile();
   for (const entry of entries) {
-    zip.addBuffer(Buffer.from(entry.content, 'utf8'), entry.name);
+    if (entry.dir || (entry.content === undefined && entry.name.endsWith('/'))) {
+      // Explicit directory entries help FULL_SUBTREE comparisons match OS directories.
+      zip.addEmptyDirectory(entry.name);
+    } else {
+      zip.addBuffer(Buffer.from(entry.content ?? '', 'utf8'), entry.name);
+    }
   }
   zip.end();
   return new Promise((resolve, reject) => {
