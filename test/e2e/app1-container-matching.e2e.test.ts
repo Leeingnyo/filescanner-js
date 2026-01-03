@@ -28,11 +28,8 @@ describe('E2E App1 container matching', () => {
 
     let store: ReturnType<typeof createSqliteStore> | undefined;
     try {
-      // Use a shared top-level folder to avoid the "/" prefix edge case in sqlite queries.
-      const fooRoot = path.join(fooDir, 'root');
-      const barRoot = path.join(barDir, 'root');
-      fs.mkdirSync(fooRoot, { recursive: true });
-      fs.mkdirSync(barRoot, { recursive: true });
+      const fooRoot = fooDir;
+      const barRoot = barDir;
 
       // foo fixtures (add a nested depth to make subtree comparisons non-trivial)
       fs.mkdirSync(path.join(fooRoot, 'others'), { recursive: true });
@@ -65,7 +62,7 @@ describe('E2E App1 container matching', () => {
       ]);
 
       // --- Step 2: scan into sqlite snapshots (include archives) ---
-      const scopeBase = '/root';
+      const scopeBase = '/';
       store = createSqliteStore(baseDir);
       const rootFoo = makeRoot('r:foo', fooDir);
       const rootBar = makeRoot('r:bar', barDir);
@@ -136,7 +133,7 @@ describe('E2E App1 container matching', () => {
         .filter((n) => n.kind === NodeKind.FILE && n.ref.layers.length === 1 && n.name.toLowerCase().endsWith('.zip'))
         .map((n) => n.ref.vpath);
 
-      // Helper: derive container key from "/root/backup.zip" -> "/root/backup".
+      // Helper: derive container key from "/backup.zip" -> "/backup".
       const containerKeyFromZip = (zipVPath: string) => zipVPath.replace(/\.zip$/i, '');
 
       type ContainerComparison = {
